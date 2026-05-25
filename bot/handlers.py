@@ -172,3 +172,78 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text("Cancelled.")
     return ConversationHandler.END
+
+
+async def detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows all expenses for a given type in the current month. Usage: /detail Groceries"""
+    if not _is_allowed(update):
+        return
+
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "Usage: `/detail Groceries`\nExample: `/detail Bill - Gas`",
+            parse_mode="Markdown",
+        )
+        return
+
+    category = " ".join(args).strip()
+    expenses = load_month_expenses()
+    month = date.today().strftime("%B %Y")
+
+    rows = [(item, week, type_, cost) for item, week, type_, cost in expenses
+            if type_.lower() == category.lower()]
+
+    if not rows:
+        await update.message.reply_text(
+            f"No expenses found for *{category}* in {month}.",
+            parse_mode="Markdown",
+        )
+        return
+
+    total = sum(cost for _, _, _, cost in rows)
+    lines = [f"📋 *{category} — {month}*\n"]
+    for item, week, _, cost in rows:
+        sign = "+" if cost >= 0 else "-"
+        lines.append(f"  {item:<20} Week {week}   {sign}${abs(cost):,.2f}")
+    lines.append(f"\n  *Total: {'+' if total >= 0 else '-'}${abs(total):,.2f}*")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def week_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows all expenses for a given week in the current month. Usage: /week 2"""
+    if not _is_allowed(update):
+        return
+
+    args = context.args
+    # If no argument, default to current week
+    if not args:
+        from bot.sheets import current_week
+        week_num = current_week()
+    elif not args[0].isdigit():
+        await update.message.reply_text("Usage: `/week` or `/week 2`", parse_mode="Markdown")
+        return
+    else:
+        week_num = int(args[0])
+    expenses = load_month_expenses()
+    month = date.today().strftime("%B %Y")
+
+    rows = [(item, type_, cost) for item, week, type_, cost in expenses
+            if str(week) == str(week_num)]
+
+    if not rows:
+        await update.message.reply_text(
+            f"No expenses found for *Week {week_num}* in {month}.",
+            parse_mode="Markdown",
+        )
+        return
+
+    total = sum(cost for _, _, cost in rows)
+    lines = [f"📋 *Week {week_num} — {month}*\n"]
+    for item, type_, cost in rows:
+        sign = "+" if cost >= 0 else "-"
+        lines.append(f"  {item:<20} {type_:<25} {sign}${abs(cost):,.2f}")
+    lines.append(f"\n  *Total: {'+' if total >= 0 else '-'}${abs(total):,.2f}*")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
