@@ -20,7 +20,7 @@ def _is_allowed(update: Update) -> bool:
 
 
 def _parse_message(text: str):
-    """Parses 'Costco 95' or 'Coffee 4.50' → (item, amount) or None."""
+    """Parses 'Costco 95' or 'Coffee 4.50' -> (item, amount) or None."""
     text = text.strip()
     match = re.search(r'([+-]?\$?[\d,]+\.?\d*)\s*$', text)
     if not match:
@@ -84,7 +84,7 @@ async def handle_expense(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ Logged!\n  *{item}* — {default_type}\n  Week {week} | {_format_cost(amount, default_type)}",
                 parse_mode="Markdown",
             )
-        except Exception as e:
+        except Exception:
             await update.message.reply_text("❌ Couldn't write to sheet. Check logs.")
         return ConversationHandler.END
 
@@ -118,7 +118,7 @@ async def handle_type_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"✅ Logged!\n  *{item}* — {type_}\n  Week {week} | {_format_cost(amount, type_)}",
             parse_mode="Markdown",
         )
-    except Exception as e:
+    except Exception:
         await query.edit_message_text("❌ Couldn't write to sheet. Check logs.")
 
     context.user_data.clear()
@@ -168,76 +168,87 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await update.message.reply_text("Cancelled.")
-    return ConversationHandler.END
-
-
 async def detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Shows all expenses for a given type in the current month. Usage: /detail Groceries"""
+    """Shows available types as buttons, then displays expenses for the chosen type."""
     if not _is_allowed(update):
         return
 
-    args = context.args
-    if not args:
-        await update.message.reply_text(
-            "Usage: `/detail Groceries`\nExample: `/detail Bill - Gas`",
-            parse_mode="Markdown",
-        )
-        return
-
-    category = " ".join(args).strip()
     expenses = load_month_expenses()
     month = date.today().strftime("%B %Y")
 
-    rows = [(item, week, type_, cost) for item, week, type_, cost in expenses
-            if type_.lower() == category.lower()]
+    available_types = sorted(set(type_ for _, _, type_, _ in expenses))
 
-    if not rows:
-        await update.message.reply_text(
-            f"No expenses found for *{category}* in {month}.",
-            parse_mode="Markdown",
-        )
+    if not available_types:
+        await update.message.reply_text(f"No expenses found for {month}.")
         return
 
-    total = sum(cost for _, _, _, cost in rows)
-    lines = [f"📋 *{category} — {month}*\n"]
-    for item, week, _, cost in rows:
+    buttons = [InlineKeyboardButton(t, callback_data=f"detail:{t}") for t in available_types]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+
+    await update.message.reply_text(
+        f"📋 *{month}* — which type?",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def handle_detail_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the type button tap and shows expenses for that type."""
+    query = update.callback_query
+    await query.answer()
+
+    type_name = query.data.split(":", 1)[1]
+    expenses = load_month_expenses()
+    month = date.today().strftime("%B %Y")
+
+    rows = [(item, week, cost) for item, week, type_, cost in expenses
+            if type_ == type_name]
+
+    total = sum(cost for _, _, cost in rows)
+    lines = [f"📋 *{type_name} — {month}*\n"]
+    for item, week, cost in rows:
         sign = "+" if cost >= 0 else "-"
         lines.append(f"  {item:<20} Week {week}   {sign}${abs(cost):,.2f}")
     lines.append(f"\n  *Total: {'+' if total >= 0 else '-'}${abs(total):,.2f}*")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await query.edit_message_text("\n".join(lines), parse_mode="Markdown")
 
 
 async def week_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Shows all expenses for a given week in the current month. Usage: /week 2"""
+    """Shows available weeks as buttons, then displays expenses for the chosen week."""
     if not _is_allowed(update):
         return
 
-    args = context.args
-    # If no argument, default to current week
-    if not args:
-        from bot.sheets import current_week
-        week_num = current_week()
-    elif not args[0].isdigit():
-        await update.message.reply_text("Usage: `/week` or `/week 2`", parse_mode="Markdown")
+    expenses = load_month_expenses()
+    month = date.today().strftime("%B %Y")
+
+    available_weeks = sorted(set(str(week) for _, week, _, _ in expenses), key=int)
+
+    if not available_weeks:
+        await update.message.reply_text(f"No expenses found for {month}.")
         return
-    else:
-        week_num = int(args[0])
+
+    buttons = [InlineKeyboardButton(f"Week {w}", callback_data=f"week:{w}") for w in available_weeks]
+    rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
+
+    await update.message.reply_text(
+        f"📋 *{month}* — which week?",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def handle_week_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the week button tap and shows expenses for that week."""
+    query = update.callback_query
+    await query.answer()
+
+    week_num = query.data.split(":")[1]
     expenses = load_month_expenses()
     month = date.today().strftime("%B %Y")
 
     rows = [(item, type_, cost) for item, week, type_, cost in expenses
             if str(week) == str(week_num)]
-
-    if not rows:
-        await update.message.reply_text(
-            f"No expenses found for *Week {week_num}* in {month}.",
-            parse_mode="Markdown",
-        )
-        return
 
     total = sum(cost for _, _, cost in rows)
     lines = [f"📋 *Week {week_num} — {month}*\n"]
@@ -246,4 +257,10 @@ async def week_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"  {item:<20} {type_:<25} {sign}${abs(cost):,.2f}")
     lines.append(f"\n  *Total: {'+' if total >= 0 else '-'}${abs(total):,.2f}*")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await query.edit_message_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
+    await update.message.reply_text("Cancelled.")
+    return ConversationHandler.END
