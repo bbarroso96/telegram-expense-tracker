@@ -1,0 +1,21 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# Local context / notes (not tracked)
+CONTEXT.md
+*.local.md
+
+# SQLite database (local data)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Node modules (the built frontend/dist IS committed, so the Pi gets it via git)
+node_modules/
+
+# Claude Code local (personal) settings
+.claude/settings.local.json

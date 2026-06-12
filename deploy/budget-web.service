@@ -1,0 +1,15 @@
+[Unit]
+Description=Budget Notebook - web (API + frontend)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/telegram-expense-tracker
+ExecStart=/home/pi/telegram-expense-tracker/.venv/bin/python -m uvicorn api.app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
