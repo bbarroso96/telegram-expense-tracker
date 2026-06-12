@@ -5,9 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/telegram-expense-tracker
-ExecStart=/home/pi/telegram-expense-tracker/.venv/bin/python -m uvicorn api.app:app --host 0.0.0.0 --port 8000
+User=brunobarroso
+WorkingDirectory=/home/brunobarroso/Desktop/telegram-expense-tracker
+ExecStart=/home/brunobarroso/Desktop/telegram-expense-tracker/.venv/bin/python -m uvicorn api.app:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 
